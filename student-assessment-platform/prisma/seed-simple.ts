@@ -56,13 +56,13 @@ async function main() {
       },
     },
     update: {},
-    create: {
-      tenantId: tenant.id,
-      email: 'student@test-school.com',
-      role: 'STUDENT',
-      name: 'Test Student',
-      metadata: {},
-    },
+      create: {
+        tenantId: tenant.id,
+        email: 'student@test-school.com',
+        role: 'STUDENT',
+        name: 'Test Student',
+        metadata: {},
+      },
   });
   console.log('✅ Student user created:', studentUser.email);
 
