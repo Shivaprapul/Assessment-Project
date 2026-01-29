@@ -15,6 +15,11 @@ export interface GameConfig {
   orderIndex: number;
   targetCategories: string[];
   thumbnail?: string;
+  // Grade-aware metadata
+  gradeApplicability?: number[]; // e.g. [8], [9,10], [8,9,10] - defaults to [8,9,10] if not specified
+  primarySkills?: string[]; // Primary skill categories targeted
+  secondarySkills?: string[]; // Secondary skill categories
+  difficultyByGrade?: Record<number, 'easy' | 'medium' | 'hard'>;
 }
 
 export const ASSESSMENT_GAMES: GameConfig[] = [
@@ -26,6 +31,13 @@ export const ASSESSMENT_GAMES: GameConfig[] = [
     difficulty: 2,
     orderIndex: 1,
     targetCategories: ['COGNITIVE_REASONING'],
+    gradeApplicability: [8, 9, 10],
+    primarySkills: ['COGNITIVE_REASONING'],
+    difficultyByGrade: {
+      8: 'easy',
+      9: 'medium',
+      10: 'medium',
+    },
   },
   {
     id: 'many_ways_builder',
@@ -35,6 +47,13 @@ export const ASSESSMENT_GAMES: GameConfig[] = [
     difficulty: 2,
     orderIndex: 2,
     targetCategories: ['CREATIVITY'],
+    gradeApplicability: [8, 9, 10],
+    primarySkills: ['CREATIVITY'],
+    difficultyByGrade: {
+      8: 'easy',
+      9: 'medium',
+      10: 'medium',
+    },
   },
   {
     id: 'story_lens',
@@ -44,6 +63,13 @@ export const ASSESSMENT_GAMES: GameConfig[] = [
     difficulty: 2,
     orderIndex: 3,
     targetCategories: ['LANGUAGE', 'CREATIVITY'],
+    gradeApplicability: [8, 9, 10],
+    primarySkills: ['LANGUAGE', 'CREATIVITY'],
+    difficultyByGrade: {
+      8: 'easy',
+      9: 'medium',
+      10: 'medium',
+    },
   },
   {
     id: 'visual_vault',
@@ -53,6 +79,13 @@ export const ASSESSMENT_GAMES: GameConfig[] = [
     difficulty: 2,
     orderIndex: 4,
     targetCategories: ['MEMORY'],
+    gradeApplicability: [8, 9, 10],
+    primarySkills: ['MEMORY'],
+    difficultyByGrade: {
+      8: 'easy',
+      9: 'medium',
+      10: 'medium',
+    },
   },
   {
     id: 'focus_sprint',
@@ -62,6 +95,13 @@ export const ASSESSMENT_GAMES: GameConfig[] = [
     difficulty: 2,
     orderIndex: 5,
     targetCategories: ['ATTENTION'],
+    gradeApplicability: [8, 9, 10],
+    primarySkills: ['ATTENTION'],
+    difficultyByGrade: {
+      8: 'easy',
+      9: 'medium',
+      10: 'medium',
+    },
   },
   {
     id: 'mission_planner',
@@ -71,6 +111,13 @@ export const ASSESSMENT_GAMES: GameConfig[] = [
     difficulty: 2,
     orderIndex: 6,
     targetCategories: ['PLANNING'],
+    gradeApplicability: [8, 9, 10],
+    primarySkills: ['PLANNING'],
+    difficultyByGrade: {
+      8: 'easy',
+      9: 'medium',
+      10: 'medium',
+    },
   },
   {
     id: 'dilemma_compass',
@@ -80,6 +127,13 @@ export const ASSESSMENT_GAMES: GameConfig[] = [
     difficulty: 3,
     orderIndex: 7,
     targetCategories: ['SOCIAL_EMOTIONAL', 'CHARACTER_VALUES'],
+    gradeApplicability: [8, 9, 10],
+    primarySkills: ['SOCIAL_EMOTIONAL', 'CHARACTER_VALUES'],
+    difficultyByGrade: {
+      8: 'easy',
+      9: 'medium',
+      10: 'hard',
+    },
   },
   {
     id: 'replay_reflect',
@@ -89,6 +143,13 @@ export const ASSESSMENT_GAMES: GameConfig[] = [
     difficulty: 2,
     orderIndex: 8,
     targetCategories: ['METACOGNITION'],
+    gradeApplicability: [8, 9, 10],
+    primarySkills: ['METACOGNITION'],
+    difficultyByGrade: {
+      8: 'easy',
+      9: 'medium',
+      10: 'medium',
+    },
   },
 ];
 

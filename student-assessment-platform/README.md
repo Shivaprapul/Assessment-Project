@@ -53,7 +53,11 @@ A comprehensive multi-tenant web application for student assessment, skill devel
    - `REDIS_URL`: Redis connection string
    - `NEXTAUTH_SECRET`: Random secret for JWT
    - `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`: AI provider key
+   - `DEMO_ASSESSMENTS=true`: Enable demo mode for assessments (server-side)
+   - `NEXT_PUBLIC_DEMO_ASSESSMENTS=true`: Enable demo mode (client-side, required for UI)
    - Other service keys as needed
+   
+   **Note**: For demo mode, both `DEMO_ASSESSMENTS` and `NEXT_PUBLIC_DEMO_ASSESSMENTS` must be set to `true`.
 
 4. **Set up the database:**
    ```bash

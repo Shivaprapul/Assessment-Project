@@ -13,24 +13,25 @@ datasource db {
 // ============= CORE TENANT MODELS =============
 
 model Tenant {
-  id                String   @id @default(uuid())
+  id                String     @id @default(uuid())
   name              String
   type              TenantType
-  subdomain         String   @unique
+  subdomain         String     @unique
   customDomain      String?
-  branding          Json     @default("{}")
-  features          Json     @default("{}")
-  subscription      Json     @default("{}")
-  dataRetentionDays Int      @default(730)
-  isActive          Boolean  @default(true)
-  deletedAt        DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  users             User[]
-  students          StudentProfile[]
-  activities        Activity[]
-  
+  branding          Json       @default("{}")
+  features          Json       @default("{}")
+  subscription      Json       @default("{}")
+  dataRetentionDays Int        @default(730)
+  isActive          Boolean    @default(true)
+  deletedAt         DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  users              User[]
+  students           StudentProfile[]
+  activities         Activity[]
+  academicYearConfig AcademicYearConfig?
+
   @@index([subdomain])
   @@map("tenants")
 }
@@ -38,27 +39,28 @@ model Tenant {
 enum TenantType {
   SCHOOL
   B2C
+
   @@map("tenant_type")
 }
 
 model User {
-  id            String   @id @default(uuid())
-  tenantId      String
-  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  email         String
-  role          UserRole
-  name          String
-  phone         String?
-  avatar        String?
-  metadata      Json     @default("{}")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  lastLoginAt   DateTime?
-  
-  studentProfile  StudentProfile?
-  consentRecords  ConsentRecord[]
-  auditLogs       AuditLog[]
-  
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email       String
+  role        UserRole
+  name        String
+  phone       String?
+  avatar      String?
+  metadata    Json      @default("{}")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastLoginAt DateTime?
+
+  studentProfile StudentProfile?
+  consentRecords ConsentRecord[]
+  auditLogs      AuditLog[]
+
   @@unique([tenantId, email])
   @@index([tenantId, role])
   @@map("users")
@@ -70,66 +72,79 @@ enum UserRole {
   TEACHER
   SCHOOL_ADMIN
   PLATFORM_ADMIN
+
   @@map("user_role")
 }
 
 // ============= STUDENT MODELS =============
 
 model StudentProfile {
-  id                  String   @id @default(uuid())
-  userId              String   @unique
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tenantId            String
-  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  grade               Int
-  section             String?
-  dateOfBirth         DateTime
-  parentIds           String[]
-  teacherIds          String[]
-  goals               String[] @default([])
-  preferredMode       Mode?
-  onboardingComplete  Boolean  @default(false)
-  assessmentComplete  Boolean  @default(false)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  
-  assessmentAttempts  AssessmentAttempt[]
-  skillScores         SkillScore[]
-  aiReports           AIReport[]
-  behavioralEvents    BehavioralEvent[]
-  activityAttempts    ActivityAttempt[]
-  
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId           String
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  grade              Int // Legacy field, use currentGrade instead
+  currentGrade       Int      @default(8) // Current standard: 8, 9, or 10
+  section            String?
+  dateOfBirth        DateTime
+  parentIds          String[]
+  teacherIds         String[]
+  goals              String[] @default([])
+  preferredMode      Mode?
+  onboardingComplete Boolean  @default(false)
+  assessmentComplete Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  assessmentAttempts AssessmentAttempt[]
+  skillScores        SkillScore[]
+  aiReports          AIReport[]
+  behavioralEvents   BehavioralEvent[]
+  activityAttempts   ActivityAttempt[]
+  dailyQuestSets     DailyQuestSet[]
+  questAttempts      QuestAttempt[]
+  careerUnlocks      CareerUnlock[]
+  facilitatorGoal    FacilitatorGoal?
+  weeklyPlans        WeeklyPlan[]
+  gradeJourneys      GradeJourney[]
+  gradeMasteryBadges GradeMasteryBadge[]
+
   @@index([tenantId])
   @@index([grade])
+  @@index([currentGrade])
   @@map("student_profiles")
 }
 
 enum Mode {
   EXPLORER
   FACILITATOR
+
   @@map("mode")
 }
 
 // ============= ASSESSMENT MODELS =============
 
 model AssessmentAttempt {
-  id               String   @id @default(uuid())
-  studentId        String
-  student          StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  tenantId         String
-  gameId           String
-  attemptNumber    Int      @default(1)
-  startedAt        DateTime @default(now())
-  completedAt      DateTime?
-  status           AttemptStatus @default(IN_PROGRESS)
-  telemetry        Json     @default("{}")
-  rawScores        Json     @default("{}")
-  normalizedScores Json     @default("{}")
-  reflectionText   String?  @db.Text
-  metadata         Json     @default("{}")
-  
+  id                   String         @id @default(uuid())
+  studentId            String
+  student              StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tenantId             String
+  gameId               String
+  attemptNumber        Int            @default(1)
+  startedAt            DateTime       @default(now())
+  completedAt          DateTime?
+  status               AttemptStatus  @default(IN_PROGRESS)
+  telemetry            Json           @default("{}")
+  rawScores            Json           @default("{}")
+  normalizedScores     Json           @default("{}")
+  reflectionText       String?        @db.Text
+  metadata             Json           @default("{}")
+  gradeAtTimeOfAttempt Int? // Grade when attempt was made (8, 9, or 10)
+
   @@index([studentId, gameId])
   @@index([tenantId])
+  @@index([gradeAtTimeOfAttempt])
   @@map("assessment_attempts")
 }
 
@@ -137,22 +152,23 @@ enum AttemptStatus {
   IN_PROGRESS
   COMPLETED
   ABANDONED
+
   @@map("attempt_status")
 }
 
 model SkillScore {
-  id            String   @id @default(uuid())
+  id            String         @id @default(uuid())
   studentId     String
   student       StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
   tenantId      String
   category      SkillCategory
   score         Float
   level         SkillLevel
-  evidence      String[] @default([])
+  evidence      String[]       @default([])
   trend         Trend
-  lastUpdatedAt DateTime @default(now())
-  history       Json     @default("[]")
-  
+  lastUpdatedAt DateTime       @default(now())
+  history       Json           @default("[]")
+
   @@unique([studentId, category])
   @@index([tenantId])
   @@map("skill_scores")
@@ -168,6 +184,7 @@ enum SkillCategory {
   SOCIAL_EMOTIONAL
   METACOGNITION
   CHARACTER_VALUES
+
   @@map("skill_category")
 }
 
@@ -176,6 +193,7 @@ enum SkillLevel {
   DEVELOPING
   PROFICIENT
   ADVANCED
+
   @@map("skill_level")
 }
 
@@ -183,21 +201,22 @@ enum Trend {
   IMPROVING
   STABLE
   NEEDS_ATTENTION
+
   @@map("trend")
 }
 
 model AIReport {
-  id              String   @id @default(uuid())
+  id              String         @id @default(uuid())
   studentId       String
   student         StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
   tenantId        String
   reportType      ReportType
-  generatedAt     DateTime @default(now())
-  studentInsights Json     @default("{}")
-  parentGuidance  Json     @default("{}")
-  evidenceUsed    String[] @default([])
-  metadata        Json     @default("{}")
-  
+  generatedAt     DateTime       @default(now())
+  studentInsights Json           @default("{}")
+  parentGuidance  Json           @default("{}")
+  evidenceUsed    String[]       @default([])
+  metadata        Json           @default("{}")
+
   @@index([studentId, reportType])
   @@index([tenantId])
   @@map("ai_reports")
@@ -207,25 +226,26 @@ enum ReportType {
   INITIAL_ASSESSMENT
   MONTHLY_PROGRESS
   GOAL_REVIEW
+
   @@map("report_type")
 }
 
 // ============= BEHAVIORAL TIMELINE =============
 
 model BehavioralEvent {
-  id            String   @id @default(uuid())
+  id            String         @id @default(uuid())
   studentId     String
   student       StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
   tenantId      String
-  timestamp     DateTime @default(now())
+  timestamp     DateTime       @default(now())
   eventType     EventType
   context       String
   sourceGameId  String?
-  studentChoice String   @db.Text
-  aiAnalysis    Json     @default("{}")
+  studentChoice String         @db.Text
+  aiAnalysis    Json           @default("{}")
   visibility    Visibility
-  metadata      Json     @default("{}")
-  
+  metadata      Json           @default("{}")
+
   @@index([studentId, timestamp])
   @@index([tenantId])
   @@map("behavioral_events")
@@ -238,6 +258,7 @@ enum EventType {
   RISK_TAKING
   EMPATHY
   PERSISTENCE
+
   @@map("event_type")
 }
 
@@ -245,29 +266,30 @@ enum Visibility {
   STUDENT_ONLY
   STUDENT_AND_PARENT
   ALL
+
   @@map("visibility")
 }
 
 // ============= ACTIVITY MODELS =============
 
 model Activity {
-  id              String   @id @default(uuid())
-  tenantId        String?
-  tenant          Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  title           String
-  description     String   @db.Text
-  mode            String[] // Array of Mode enum values
-  type            ActivityType
+  id               String       @id @default(uuid())
+  tenantId         String?
+  tenant           Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  title            String
+  description      String       @db.Text
+  mode             String[] // Array of Mode enum values
+  type             ActivityType
   targetCategories String[]
-  difficulty      Int
-  estimatedTime   Int
-  content         Json     @default("{}")
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  attempts        ActivityAttempt[]
-  
+  difficulty       Int
+  estimatedTime    Int
+  content          Json         @default("{}")
+  isActive         Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  attempts ActivityAttempt[]
+
   @@index([tenantId])
   @@index([difficulty])
   @@map("activities")
@@ -279,46 +301,272 @@ enum ActivityType {
   SKILL_BUILDER
   REFLECTION
   MILESTONE
+
   @@map("activity_type")
 }
 
 model ActivityAttempt {
-  id            String   @id @default(uuid())
-  studentId     String
-  student       StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  tenantId      String
-  activityId    String
-  activity      Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  mode          Mode
-  startedAt     DateTime @default(now())
-  completedAt   DateTime?
-  status        AttemptStatus
-  telemetry     Json     @default("{}")
-  aiAssessment  Json?
-  reflectionText String?  @db.Text
-  
+  id             String         @id @default(uuid())
+  studentId      String
+  student        StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tenantId       String
+  activityId     String
+  activity       Activity       @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  mode           Mode
+  startedAt      DateTime       @default(now())
+  completedAt    DateTime?
+  status         AttemptStatus
+  telemetry      Json           @default("{}")
+  aiAssessment   Json?
+  reflectionText String?        @db.Text
+
   @@index([studentId, mode])
   @@index([tenantId])
   @@map("activity_attempts")
 }
 
+// ============= EXPLORER MODE MODELS =============
+
+model DailyQuestSet {
+  id              String         @id @default(uuid())
+  studentId       String
+  student         StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tenantId        String
+  date            DateTime       @db.Date
+  mode            Mode           @default(EXPLORER)
+  quests          Json           @default("[]") // Array of quest definitions (stored as JSON array)
+  gradeAtCreation Int? // Grade when quest set was created (8, 9, or 10)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([studentId, date, mode])
+  @@index([tenantId, date])
+  @@index([gradeAtCreation])
+  @@map("daily_quest_sets")
+}
+
+model QuestAttempt {
+  id                   String         @id @default(uuid())
+  studentId            String
+  student              StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tenantId             String
+  questId              String // Reference to quest in DailyQuestSet.quests array
+  questSetId           String? // Optional link to DailyQuestSet
+  questType            QuestType
+  startedAt            DateTime       @default(now())
+  completedAt          DateTime?
+  status               AttemptStatus  @default(IN_PROGRESS)
+  telemetry            Json           @default("{}")
+  scoreSummary         Json           @default("{}")
+  aiInsight            Json? // AI insight card data
+  gradeAtTimeOfAttempt Int? // Grade when attempt was made (8, 9, or 10)
+  createdAt            DateTime       @default(now())
+
+  @@index([studentId, status])
+  @@index([tenantId])
+  @@index([questId])
+  @@index([gradeAtTimeOfAttempt])
+  @@map("quest_attempts")
+}
+
+enum QuestType {
+  MINI_GAME
+  REFLECTION
+  CHOICE_SCENARIO
+
+  @@map("quest_type")
+}
+
+model CareerCatalog {
+  id                  String     @id @default(uuid())
+  title               String
+  shortPitch          String     @db.Text
+  dayInLife           String     @db.Text
+  skillSignals        String[] // Array of skill categories
+  recommendedSubjects String[]
+  starterPathSteps    String[]
+  icon                String? // Emoji or icon identifier
+  rarityTier          RarityTier @default(COMMON)
+  isActive            Boolean    @default(true)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  unlocks CareerUnlock[]
+
+  @@index([rarityTier])
+  @@map("career_catalog")
+}
+
+enum RarityTier {
+  COMMON
+  EMERGING
+  ADVANCED
+  FRONTIER
+
+  @@map("rarity_tier")
+}
+
+model CareerUnlock {
+  id             String         @id @default(uuid())
+  studentId      String
+  student        StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tenantId       String
+  careerId       String
+  career         CareerCatalog  @relation(fields: [careerId], references: [id], onDelete: Cascade)
+  unlockedAt     DateTime       @default(now())
+  reasonEvidence Json           @default("{}") // Evidence for why this career was unlocked
+  linkedSkills   String[] // Skill categories that triggered unlock
+  metadata       Json           @default("{}")
+
+  @@unique([studentId, careerId])
+  @@index([tenantId])
+  @@index([unlockedAt])
+  @@map("career_unlocks")
+}
+
+// ============= FACILITATOR MODE MODELS =============
+
+model FacilitatorGoal {
+  id                String         @id @default(uuid())
+  studentId         String         @unique
+  student           StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tenantId          String
+  goalTitle         String // e.g., "IAS", "Doctor", "Software Engineer", or custom text
+  goalType          GoalType       @default(CURATED)
+  careerId          String? // If selected from CareerCatalog
+  timeAvailability  Int            @default(20) // minutes per day (10, 20, or 30)
+  focusAreas        String[]       @default([]) // Optional skill categories
+  goalReadiness     Float          @default(0.0) // 0-100 score
+  lastReadinessCalc DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([tenantId])
+  @@map("facilitator_goals")
+}
+
+enum GoalType {
+  CURATED // From predefined list (IAS, Doctor, etc.)
+  CAREER_CATALOG // From CareerCatalog
+  CUSTOM // Custom text input
+
+  @@map("goal_type")
+}
+
+model WeeklyPlan {
+  id                 String         @id @default(uuid())
+  studentId          String
+  student            StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tenantId           String
+  weekStartDate      DateTime       @db.Date
+  weekEndDate        DateTime       @db.Date
+  focusSkills        String[]       @default([]) // Top 3 skills for the week
+  dailyTimeBudget    Int            @default(20) // minutes per day
+  dailyPlan          Json           @default("[]") // Array of 7 daily plans
+  goalReadinessDelta Float? // Expected improvement in goal readiness
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@unique([studentId, weekStartDate])
+  @@index([tenantId, weekStartDate])
+  @@map("weekly_plans")
+}
+
+// ============= GRADE PROGRESSION MODELS =============
+
+model AcademicYearConfig {
+  id         String   @id @default(uuid())
+  tenantId   String? // Null for global default, non-null for tenant override
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  startMonth Int      @default(6) // June
+  startDay   Int      @default(1)
+  endMonth   Int      @default(5) // May
+  endDay     Int      @default(31)
+  timezone   String   @default("Asia/Kolkata")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([tenantId]) // Composite unique - allows one null (global) and one per tenant
+  @@map("academic_year_configs")
+}
+
+model GradeJourney {
+  id               String          @id @default(uuid())
+  studentId        String
+  student          StudentProfile  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tenantId         String
+  grade            Int // 8, 9, or 10
+  startDate        DateTime        @default(now())
+  endDate          DateTime? // Null if currently active
+  completionStatus GradeStatus     @default(IN_PROGRESS)
+  completionType   CompletionType? // SOFT or HARD (if hard completion achieved)
+  summarySnapshot  Json            @default("{}") // Final skills, traits, achievements for this grade
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([studentId])
+  @@index([tenantId, grade])
+  @@index([studentId, grade])
+  @@map("grade_journeys")
+}
+
+enum GradeStatus {
+  IN_PROGRESS
+  COMPLETED
+
+  @@map("grade_status")
+}
+
+enum CompletionType {
+  SOFT // Date-based completion (academic year end)
+  HARD // Requirement-based completion (met mastery criteria)
+
+  @@map("completion_type")
+}
+
+model GradeMasteryBadge {
+  id             String         @id @default(uuid())
+  studentId      String
+  student        StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tenantId       String
+  grade          Int // 8, 9, or 10
+  gradeJourneyId String? // Link to GradeJourney if applicable
+  badgeType      BadgeType      @default(MASTERY)
+  awardedAt      DateTime       @default(now())
+  requirements   Json           @default("{}") // Requirements that were met
+  metadata       Json           @default("{}")
+  createdAt      DateTime       @default(now())
+
+  @@unique([studentId, grade, badgeType])
+  @@index([tenantId])
+  @@index([studentId, grade])
+  @@map("grade_mastery_badges")
+}
+
+enum BadgeType {
+  MASTERY // Grade mastery badge
+  COMPLETION_CERTIFICATE // Grade completion certificate
+
+  @@map("badge_type")
+}
+
 // ============= COMPLIANCE MODELS =============
 
 model ConsentRecord {
-  id              String   @id @default(uuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subjectUserId   String
-  tenantId        String
-  purpose         ConsentPurpose
-  granted         Boolean
-  timestamp       DateTime @default(now())
-  ipAddress       String
-  userAgent       String
-  expiresAt       DateTime?
-  withdrawnAt     DateTime?
-  metadata        Json     @default("{}")
-  
+  id            String         @id @default(uuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectUserId String
+  tenantId      String
+  purpose       ConsentPurpose
+  granted       Boolean
+  timestamp     DateTime       @default(now())
+  ipAddress     String
+  userAgent     String
+  expiresAt     DateTime?
+  withdrawnAt   DateTime?
+  metadata      Json           @default("{}")
+
   @@index([subjectUserId, purpose])
   @@index([tenantId])
   @@map("consent_records")
@@ -331,24 +579,25 @@ enum ConsentPurpose {
   PARENT_VISIBILITY
   TEACHER_VISIBILITY
   RESEARCH
+
   @@map("consent_purpose")
 }
 
 model AuditLog {
-  id            String   @id @default(uuid())
-  tenantId      String
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  action        Action
-  resourceType  ResourceType
-  resourceId    String
-  ipAddress     String
-  userAgent     String
-  timestamp     DateTime @default(now())
-  success       Boolean
-  errorMessage  String?  @db.Text
-  metadata      Json     @default("{}")
-  
+  id           String       @id @default(uuid())
+  tenantId     String
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action       Action
+  resourceType ResourceType
+  resourceId   String
+  ipAddress    String
+  userAgent    String
+  timestamp    DateTime     @default(now())
+  success      Boolean
+  errorMessage String?      @db.Text
+  metadata     Json         @default("{}")
+
   @@index([tenantId, timestamp])
   @@index([userId, timestamp])
   @@index([resourceType, resourceId])
@@ -361,6 +610,7 @@ enum Action {
   UPDATE
   DELETE
   EXPORT
+
   @@map("action")
 }
 
@@ -370,6 +620,7 @@ enum ResourceType {
   REPORT
   CONSENT
   ACTIVITY
+
   @@map("resource_type")
 }
 
@@ -398,6 +649,7 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
+
   @@map("sessions")
 }
 

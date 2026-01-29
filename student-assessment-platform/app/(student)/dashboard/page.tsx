@@ -128,6 +128,12 @@ export default function StudentDashboard() {
       const profileData = await profileResponse.json();
       if (profileData?.success) {
         setStudentProfile(profileData.data);
+        
+        // Redirect to onboarding if not complete
+        if (!profileData.data.onboardingComplete) {
+          router.push('/onboarding');
+          return;
+        }
       } else {
         throw new Error('Invalid response from server');
       }
@@ -177,6 +183,8 @@ export default function StudentDashboard() {
   }, [router]);
 
   const handleModeChange = async (newMode: 'explorer' | 'facilitator') => {
+    // Convert to uppercase for API
+    const modeValue = newMode.toUpperCase() as 'EXPLORER' | 'FACILITATOR';
     if (!studentProfile) return;
 
     const previousMode = studentProfile.preferredMode;
@@ -189,7 +197,7 @@ export default function StudentDashboard() {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ preferredMode: newMode }),
+        body: JSON.stringify({ preferredMode: modeValue }),
       });
 
       if (response.status === 401 || response.status === 403) {
@@ -212,6 +220,15 @@ export default function StudentDashboard() {
             preferredMode: data.data.preferredMode,
           };
         });
+
+        // Navigate to the appropriate mode page
+        if (modeValue === 'EXPLORER') {
+          // Navigate to explorer page
+          router.push('/explorer');
+        } else if (modeValue === 'FACILITATOR') {
+          // Navigate to facilitator page
+          router.push('/facilitator');
+        }
       }
     } catch (err: any) {
       console.error('Failed to update mode:', err);

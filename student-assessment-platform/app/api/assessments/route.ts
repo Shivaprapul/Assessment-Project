@@ -59,19 +59,30 @@ export const GET = requireAuth(
         );
       }
 
-      // Get all completed attempts for this student
-      const completedAttempts = await db.assessmentAttempt.findMany({
+      // Get all attempts for this student
+      const allAttempts = await db.assessmentAttempt.findMany({
         where: {
           studentId: student.id,
           tenantId,
-          status: 'COMPLETED',
         },
         select: {
           gameId: true,
+          status: true,
+          id: true,
         },
       });
 
-      const completedGameIds = new Set(completedAttempts.map(a => a.gameId));
+      const completedGameIds = new Set(
+        allAttempts.filter(a => a.status === 'COMPLETED').map(a => a.gameId)
+      );
+      
+      // Get in-progress attempts
+      const inProgressAttempts = allAttempts
+        .filter(a => a.status === 'IN_PROGRESS')
+        .reduce((acc, attempt) => {
+          acc[attempt.gameId] = attempt.id;
+          return acc;
+        }, {} as Record<string, string>);
 
       // Get all games and check completion status
       const allGames = getAllGames();
@@ -91,6 +102,7 @@ export const GET = requireAuth(
           orderIndex: game.orderIndex,
           isUnlocked,
           isCompleted: completedGameIds.has(game.id),
+          inProgressAttemptId: inProgressAttempts[game.id] || null,
           thumbnail: game.thumbnail,
         };
       });

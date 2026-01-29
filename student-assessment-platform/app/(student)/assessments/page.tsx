@@ -38,6 +38,7 @@ interface AssessmentGame {
   orderIndex: number;
   isUnlocked: boolean;
   isCompleted: boolean;
+  inProgressAttemptId?: string | null;
   thumbnail?: string;
 }
 
@@ -84,33 +85,68 @@ export default function AssessmentsPage() {
     }
   };
 
+  const isDemoMode = process.env.NEXT_PUBLIC_DEMO_ASSESSMENTS === 'true';
+
   const fetchAssessments = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch('/api/assessments', {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-      });
+      // In demo mode, get all games and unlock them all
+      if (isDemoMode) {
+        const response = await fetch('/api/assessments', {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+        });
 
-      if (response.status === 401 || response.status === 403) {
-        router.push('/login');
-        return;
-      }
+        if (response.status === 401 || response.status === 403) {
+          router.push('/login');
+          return;
+        }
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Failed to fetch assessments');
-      }
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: { message: 'Failed to fetch assessments' } }));
+          throw new Error(errorData.error?.message || 'Failed to fetch assessments');
+        }
 
-      const data = await response.json();
-      if (data?.success) {
-        setGames(data.data);
+        const data = await response.json();
+        if (data?.success) {
+          // Unlock all games in demo mode
+          const unlockedGames = data.data.map((game: any) => ({
+            ...game,
+            isUnlocked: true, // Force unlock all games in demo mode
+          }));
+          setGames(unlockedGames);
+        } else {
+          throw new Error(data.error || 'Invalid response from server');
+        }
       } else {
-        throw new Error('Invalid response from server');
+        // Regular mode - use existing logic
+        const response = await fetch('/api/assessments', {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+        });
+
+        if (response.status === 401 || response.status === 403) {
+          router.push('/login');
+          return;
+        }
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: { message: 'Failed to fetch assessments' } }));
+          throw new Error(errorData.error?.message || 'Failed to fetch assessments');
+        }
+
+        const data = await response.json();
+        if (data?.success) {
+          setGames(data.data);
+        } else {
+          throw new Error(data.error || 'Invalid response from server');
+        }
       }
     } catch (err: any) {
       console.error('Error fetching assessments:', err);
@@ -120,16 +156,22 @@ export default function AssessmentsPage() {
     }
   };
 
-  const handleStartGame = async (gameId: string) => {
+  const handleStartGame = async (gameId: string, attemptId?: string) => {
     setStartingGame(gameId);
 
     try {
-      const response = await fetch(`/api/assessments/${gameId}/start`, {
+      // Use demo endpoint in demo mode
+      const endpoint = isDemoMode 
+        ? '/api/demo/assessments/start'
+        : `/api/assessments/${gameId}/start`;
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
+        body: JSON.stringify({ gameId }),
       });
 
       if (response.status === 401 || response.status === 403) {
@@ -138,8 +180,8 @@ export default function AssessmentsPage() {
       }
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Failed to start assessment');
+        const errorData = await response.json().catch(() => ({ error: 'Failed to start assessment' }));
+        throw new Error(errorData.error || 'Failed to start assessment');
       }
 
       const data = await response.json();
@@ -147,13 +189,40 @@ export default function AssessmentsPage() {
         // Navigate to game page with attempt ID
         router.push(`/assessments/${gameId}?attemptId=${data.data.attemptId}`);
       } else {
-        throw new Error('Invalid response from server');
+        throw new Error(data.error || 'Invalid response from server');
       }
     } catch (err: any) {
       console.error('Error starting assessment:', err);
       alert(err.message || 'Failed to start assessment. Please try again.');
     } finally {
       setStartingGame(null);
+    }
+  };
+
+  const handleAbandonAttempt = async (gameId: string, attemptId: string) => {
+    if (!confirm('Are you sure you want to abandon this attempt? You can start a new one after abandoning.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/assessments/attempts/${attemptId}/abandon`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'Failed to abandon attempt');
+      }
+
+      // Refresh the assessments list
+      fetchAssessments();
+    } catch (err: any) {
+      console.error('Error abandoning attempt:', err);
+      alert(err.message || 'Failed to abandon attempt. Please try again.');
     }
   };
 
@@ -330,30 +399,61 @@ export default function AssessmentsPage() {
                     </div>
                   </div>
 
-                  {/* Action Button */}
-                  <Button
-                    className="w-full"
-                    onClick={() => handleStartGame(game.id)}
-                    disabled={!game.isUnlocked || startingGame === game.id}
-                    variant={game.isCompleted ? 'outline' : 'default'}
-                  >
-                    {startingGame === game.id ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Starting...
-                      </>
-                    ) : game.isCompleted ? (
-                      <>
-                        <Play className="h-4 w-4 mr-2" />
-                        Play Again
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-4 w-4 mr-2" />
-                        Start Game
-                      </>
-                    )}
-                  </Button>
+                  {/* Action Buttons */}
+                  {game.inProgressAttemptId ? (
+                    <div className="space-y-2">
+                      <Button
+                        className="w-full"
+                        onClick={() => handleStartGame(game.id, game.inProgressAttemptId || undefined)}
+                        disabled={startingGame === game.id}
+                        variant="default"
+                      >
+                        {startingGame === game.id ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Resuming...
+                          </>
+                        ) : (
+                          <>
+                            <Play className="h-4 w-4 mr-2" />
+                            Resume Game
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        className="w-full"
+                        variant="outline"
+                        onClick={() => handleAbandonAttempt(game.id, game.inProgressAttemptId!)}
+                        disabled={startingGame === game.id}
+                      >
+                        Abandon
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      className="w-full"
+                      onClick={() => handleStartGame(game.id)}
+                      disabled={!game.isUnlocked || startingGame === game.id}
+                      variant={game.isCompleted ? 'outline' : 'default'}
+                    >
+                      {startingGame === game.id ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Starting...
+                        </>
+                      ) : game.isCompleted ? (
+                        <>
+                          <Play className="h-4 w-4 mr-2" />
+                          Play Again
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-4 w-4 mr-2" />
+                          Start Game
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ))}

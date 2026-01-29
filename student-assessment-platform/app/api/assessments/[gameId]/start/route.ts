@@ -16,6 +16,7 @@ import { withTenantContext } from '@/lib/middleware/tenant';
 import { db } from '@/lib/db';
 import { getGameConfig } from '@/lib/games';
 import { handleAPIError, successResponse } from '@/lib/api/error-handler';
+import { generateDemoQuestions } from '@/lib/demo-questions';
 
 /**
  * POST /api/assessments/:gameId/start
@@ -110,16 +111,42 @@ export async function POST(
           },
         });
 
+        // If there's an in-progress attempt, resume it instead of creating a new one
         if (inProgressAttempt) {
+          // Generate demo questions if DEMO_ASSESSMENTS is enabled
+          const isDemoMode = process.env.DEMO_ASSESSMENTS === 'true';
+          let demoQuestions = null;
+          
+          if (isDemoMode) {
+            // Use userId as seed for deterministic questions (same as original)
+            const seed = `${user.id}-${inProgressAttempt.id}`;
+            demoQuestions = generateDemoQuestions(gameId, seed, 12);
+          }
+
           return NextResponse.json(
-            {
-              success: false,
-              error: {
-                code: 'ATTEMPT_IN_PROGRESS',
-                message: 'You have an assessment in progress. Please complete or abandon it first.',
+            successResponse({
+              attemptId: inProgressAttempt.id,
+              gameId: inProgressAttempt.gameId,
+              attemptNumber: inProgressAttempt.attemptNumber,
+              startedAt: inProgressAttempt.startedAt,
+              status: inProgressAttempt.status,
+              resumed: true, // Indicate this is a resumed attempt
+              config: {
+                totalQuestions: isDemoMode ? (demoQuestions?.length || 12) : 10,
+                timeLimit: gameConfig.estimatedTime * 60,
+                allowPause: true,
+                showTimer: true,
               },
-            },
-            { status: 409 }
+              ...(isDemoMode && demoQuestions && {
+                questions: demoQuestions.map(q => ({
+                  id: q.id,
+                  question: q.question,
+                  type: q.type,
+                  options: q.options,
+                })),
+              }),
+            }),
+            { status: 200 }
           );
         }
 
@@ -140,7 +167,8 @@ export async function POST(
           ? previousAttempts[0].attemptNumber + 1 
           : 1;
 
-        // Create new assessment attempt
+        // Create new assessment attempt (grade-aware)
+        const studentGrade = student.currentGrade || 8; // Default to 8 if not set
         const attempt = await db.assessmentAttempt.create({
           data: {
             studentId: student.id,
@@ -151,6 +179,7 @@ export async function POST(
             telemetry: {},
             rawScores: {},
             normalizedScores: {},
+            gradeAtTimeOfAttempt: studentGrade,
             metadata: {
               gameConfig: {
                 name: gameConfig.name,
@@ -161,6 +190,16 @@ export async function POST(
           },
         });
 
+        // Generate demo questions if DEMO_ASSESSMENTS is enabled
+        const isDemoMode = process.env.DEMO_ASSESSMENTS === 'true';
+        let demoQuestions = null;
+        
+        if (isDemoMode) {
+          // Use userId as seed for deterministic questions
+          const seed = `${user.id}-${attempt.id}`;
+          demoQuestions = generateDemoQuestions(gameId, seed, 12);
+        }
+
         return NextResponse.json(
           successResponse({
             attemptId: attempt.id,
@@ -169,11 +208,20 @@ export async function POST(
             startedAt: attempt.startedAt,
             status: attempt.status,
             config: {
-              totalQuestions: 10, // Default - can be customized per game
+              totalQuestions: isDemoMode ? (demoQuestions?.length || 12) : 10,
               timeLimit: gameConfig.estimatedTime * 60, // Convert minutes to seconds
               allowPause: true,
               showTimer: true,
             },
+            ...(isDemoMode && demoQuestions && {
+              questions: demoQuestions.map(q => ({
+                id: q.id,
+                question: q.question,
+                type: q.type,
+                options: q.options,
+                // Don't send correctAnswer to client
+              })),
+            }),
           }),
           { status: 201 }
         );

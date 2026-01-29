@@ -54,7 +54,8 @@ interface StudentProfile {
   id: string;
   userId: string;
   tenantId: string;
-  grade: number;
+  grade: number; // Legacy
+  currentGrade: number; // Current standard: 8, 9, or 10
   section: string;
   dateOfBirth: string | null;
   goals: string[] | null;
@@ -69,13 +70,44 @@ interface StudentProfile {
   };
 }
 
+interface GradeJourney {
+  id: string;
+  grade: number;
+  startDate: string;
+  endDate: string | null;
+  completionStatus: 'IN_PROGRESS' | 'COMPLETED';
+  completionType?: 'SOFT' | 'HARD' | null;
+  summarySnapshot: any;
+}
+
+interface GradeInfo {
+  currentGrade: number;
+  nextGrade: number | null;
+  canUpgrade: boolean;
+  softCompletionEligible: boolean;
+  softCompletionReason: string;
+  academicYear: {
+    currentYear: string;
+    startDate: string;
+    endDate: string;
+    isComplete: boolean;
+    daysUntilEnd: number;
+  };
+  gradeJourneys: GradeJourney[];
+}
+
 interface SkillTreeCategory {
   category: string;
   name: string;
   score: number;
-  level: string;
+  level: string; // Legacy field
   icon: string;
   trend: string;
+  // New fields for student game-like display
+  skillLevel?: number; // 1-10
+  levelTitle?: string; // "Seedling", "Sprout", etc.
+  skillXP?: number; // XP value
+  currentMaturityBand?: string; // Internal only, not displayed
 }
 
 interface SkillTreeData {
@@ -140,7 +172,18 @@ function getModeLabel(mode: string | null) {
   }
 }
 
-function getLevelColor(level: string) {
+// Get color based on skill level (1-10) for game-like display
+function getLevelColor(level: number | string): string {
+  // Handle new numeric level (1-10)
+  if (typeof level === 'number') {
+    if (level >= 9) return 'bg-purple-100 text-purple-800 border-purple-200';
+    if (level >= 7) return 'bg-blue-100 text-blue-800 border-blue-200';
+    if (level >= 5) return 'bg-green-100 text-green-800 border-green-200';
+    if (level >= 3) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    return 'bg-gray-100 text-gray-800 border-gray-200';
+  }
+  
+  // Legacy string level support (fallback)
   switch (level.toLowerCase()) {
     case 'advanced':
       return 'bg-purple-100 text-purple-800 border-purple-200';
@@ -173,8 +216,10 @@ export default function ProfilePage() {
   const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null);
   const [skillTree, setSkillTree] = useState<SkillTreeData | null>(null);
   const [timeline, setTimeline] = useState<TimelineData | null>(null);
+  const [gradeInfo, setGradeInfo] = useState<GradeInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isUpgrading, setIsUpgrading] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -194,7 +239,7 @@ export default function ProfilePage() {
       const endDateStr = endDate.toISOString().split('T')[0];
 
       // Fetch all data in parallel
-      const [profileResponse, skillTreeResponse, timelineResponse] = await Promise.all([
+      const [profileResponse, skillTreeResponse, timelineResponse, gradeResponse] = await Promise.all([
         fetch('/api/students/me', {
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -204,6 +249,10 @@ export default function ProfilePage() {
           credentials: 'include',
         }),
         fetch(`/api/students/me/timeline?startDate=${startDateStr}&endDate=${endDateStr}`, {
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        }),
+        fetch('/api/students/me/grade', {
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
         }),
@@ -221,6 +270,14 @@ export default function ProfilePage() {
       const profileData = await profileResponse.json();
       const skillTreeData = await skillTreeResponse.json();
       const timelineData = await timelineResponse.json();
+      
+      // Grade API might fail if student doesn't have grade journey yet - handle gracefully
+      let gradeData = null;
+      if (gradeResponse.ok) {
+        gradeData = await gradeResponse.json();
+      } else {
+        console.warn('Grade API failed, will retry:', gradeResponse.status);
+      }
 
       if (profileData?.success) {
         setStudentProfile(profileData.data);
@@ -230,6 +287,27 @@ export default function ProfilePage() {
       }
       if (timelineData?.success) {
         setTimeline(timelineData.data);
+      }
+      if (gradeData?.success) {
+        setGradeInfo(gradeData.data);
+      } else if (gradeData === null) {
+        // Retry grade API after a short delay if it failed
+        setTimeout(async () => {
+          try {
+            const retryResponse = await fetch('/api/students/me/grade', {
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+            });
+            if (retryResponse.ok) {
+              const retryData = await retryResponse.json();
+              if (retryData?.success) {
+                setGradeInfo(retryData.data);
+              }
+            }
+          } catch (err) {
+            console.error('Retry grade API failed:', err);
+          }
+        }, 500);
       }
     } catch (err: any) {
       console.error('Error fetching profile data:', err);
@@ -249,6 +327,48 @@ export default function ProfilePage() {
       console.error('Error signing out:', err);
     }
     router.push('/login');
+  };
+
+  const handleGradeUpgrade = async () => {
+    if (!gradeInfo?.canUpgrade) return;
+
+    if (!confirm(`Are you ready to upgrade to Grade ${gradeInfo.nextGrade}? This will close your current grade journey and start a new one. All your skills and achievements will be preserved.`)) {
+      return;
+    }
+
+    setIsUpgrading(true);
+    try {
+      const response = await fetch('/api/students/me/grade', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        router.push('/login');
+        return;
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to upgrade grade');
+      }
+
+      const data = await response.json();
+      if (data?.success) {
+        // Refresh data
+        await fetchData();
+        // Navigate to grade upgrade celebration screen
+        router.push(`/profile/grade-upgrade?from=${data.data.previousGrade}&to=${data.data.newGrade}`);
+      }
+    } catch (err: any) {
+      console.error('Error upgrading grade:', err);
+      alert(err.message || 'Failed to upgrade grade. Please try again.');
+    } finally {
+      setIsUpgrading(false);
+    }
   };
 
   if (isLoading) {
@@ -353,8 +473,65 @@ export default function ProfilePage() {
                 <div className="flex-1 text-center md:text-left">
                   <h1 className="text-4xl font-bold mb-2">{studentProfile.user.name}</h1>
                   <p className="text-blue-100 text-lg mb-4">
-                    Grade {studentProfile.grade} • Section {studentProfile.section}
+                    Grade {studentProfile.currentGrade || studentProfile.grade} • Section {studentProfile.section}
                   </p>
+                  {/* Academic Year Context */}
+                  {gradeInfo?.academicYear && (
+                    <div className="mt-2 text-xs text-blue-200">
+                      Academic Year {gradeInfo.academicYear.currentYear} • 
+                      {gradeInfo.academicYear.isComplete ? (
+                        <span className="text-green-200 font-semibold"> Year Complete</span>
+                      ) : (
+                        <span> Ends {new Date(gradeInfo.academicYear.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Upgrade CTA */}
+                  {gradeInfo?.canUpgrade ? (
+                    <div className="mt-4 space-y-2">
+                      {gradeInfo.softCompletionEligible && (
+                        <p className="text-sm text-blue-100 mb-2">
+                          {gradeInfo.softCompletionReason}
+                        </p>
+                      )}
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <Button
+                          onClick={handleGradeUpgrade}
+                          disabled={isUpgrading}
+                          className="bg-white text-blue-600 hover:bg-blue-50 font-semibold flex-1"
+                        >
+                          {isUpgrading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Upgrading...
+                            </>
+                          ) : (
+                            <>
+                              <GraduationCap className="h-4 w-4 mr-2" />
+                              Upgrade to Grade {gradeInfo.nextGrade}
+                            </>
+                          )}
+                        </Button>
+                        {!gradeInfo.softCompletionEligible && (
+                          <Button
+                            variant="outline"
+                            onClick={handleGradeUpgrade}
+                            disabled={isUpgrading}
+                            className="bg-white/10 text-white border-white/20 hover:bg-white/20 flex-1"
+                          >
+                            Upgrade Now (Skip)
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ) : gradeInfo && (
+                    <div className="mt-4">
+                      <p className="text-blue-200 text-sm">
+                        {gradeInfo.softCompletionReason || 'Grade upgrade will be available soon'}
+                      </p>
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-4 justify-center md:justify-start">
                     <div className="flex items-center gap-2 bg-white/20 rounded-lg px-4 py-2">
                       <Award className="h-5 w-5" />
@@ -417,7 +594,7 @@ export default function ProfilePage() {
                       <div>
                         <p className="text-sm text-gray-500">Class</p>
                         <p className="font-medium">
-                          Grade {studentProfile.grade} - Section {studentProfile.section}
+                          Grade {studentProfile.currentGrade || studentProfile.grade} - Section {studentProfile.section}
                         </p>
                       </div>
                     </div>
@@ -499,6 +676,92 @@ export default function ProfilePage() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* My Journey Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <GraduationCap className="h-5 w-5" />
+                    My Journey
+                  </CardTitle>
+                  <CardDescription>Your academic progression across grades</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {gradeInfo && gradeInfo.gradeJourneys.length > 0 ? (
+                    <div className="space-y-4">
+                      {/* Current Grade */}
+                      <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <GraduationCap className="h-5 w-5 text-blue-600" />
+                            <span className="font-bold text-lg">Grade {studentProfile.currentGrade || studentProfile.grade}</span>
+                            <Badge className="bg-blue-600 text-white">Current</Badge>
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          Started {new Date(gradeInfo.gradeJourneys.find(j => j.grade === (studentProfile.currentGrade || studentProfile.grade) && j.completionStatus === 'IN_PROGRESS')?.startDate || studentProfile.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                        </p>
+                      </div>
+
+                      {/* Grade History */}
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-semibold text-gray-700">Previous Grades</h4>
+                        {gradeInfo.gradeJourneys
+                          .filter(j => j.completionStatus === 'COMPLETED')
+                          .sort((a, b) => b.grade - a.grade)
+                          .map((journey) => {
+                            const startDate = new Date(journey.startDate);
+                            const endDate = journey.endDate ? new Date(journey.endDate) : null;
+                            const duration = endDate 
+                              ? Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 30)) // months
+                              : null;
+
+                            return (
+                              <div key={journey.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <GraduationCap className="h-4 w-4 text-gray-600" />
+                                    <span className="font-semibold">Grade {journey.grade}</span>
+                                    <Badge variant="outline" className="text-xs">Completed</Badge>
+                                  </div>
+                                </div>
+                                <div className="text-xs text-gray-600 space-y-1">
+                                  <p>
+                                    {startDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} - {endDate?.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                                  </p>
+                                  {duration !== null && (
+                                    <p className="text-gray-500">Duration: ~{duration} months</p>
+                                  )}
+                                  {journey.completionType && (
+                                    <Badge variant="outline" className="text-xs mt-1">
+                                      {journey.completionType === 'HARD' ? '🏆 Mastery Badge' : '📅 Year Complete'}
+                                    </Badge>
+                                  )}
+                                  {journey.summarySnapshot && typeof journey.summarySnapshot === 'object' && 'skillScores' in journey.summarySnapshot && Array.isArray(journey.summarySnapshot.skillScores) && journey.summarySnapshot.skillScores.length > 0 && (
+                                    <p className="text-gray-500">
+                                      Skills developed: {journey.summarySnapshot.skillScores.length}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+
+                      {gradeInfo.gradeJourneys.filter(j => j.completionStatus === 'COMPLETED').length === 0 && (
+                        <p className="text-sm text-gray-500 text-center py-4">
+                          This is your first grade! Complete activities to build your journey.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <GraduationCap className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                      <p className="text-sm">Your journey will appear here as you progress</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
 
             {/* Right Column */}
@@ -526,9 +789,16 @@ export default function ProfilePage() {
                               </div>
                             </div>
                           </div>
-                          <Badge className={getLevelColor(skill.level)}>
-                            {skill.level}
-                          </Badge>
+                          {/* Show game-like level for students (never show maturity band labels) */}
+                          {skill.skillLevel && skill.levelTitle ? (
+                            <Badge className={getLevelColor(skill.skillLevel)}>
+                              Level {skill.skillLevel} • {skill.levelTitle}
+                            </Badge>
+                          ) : (
+                            <Badge className={getLevelColor(skill.level)}>
+                              {skill.level}
+                            </Badge>
+                          )}
                         </div>
                       ))}
                     </div>

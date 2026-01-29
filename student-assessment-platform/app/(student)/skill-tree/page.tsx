@@ -10,24 +10,26 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { SkillTree } from '@/components/skill-tree/SkillTree';
-import { getSession } from '@/lib/session';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { getSession } from '@/lib/session';
+import { SkillTreeWithMaturity } from '@/components/skill-tree/SkillTreeWithMaturity';
+
+interface SkillTreeCategory {
+  category: string;
+  name: string;
+  score: number;
+  level: string;
+  icon: string;
+  trend: string;
+  evidence?: string[];
+  history?: Array<{ date: string; score: number }>;
+}
 
 interface SkillTreeData {
   studentId: string;
   lastUpdated: string;
-  categories: Array<{
-    category: string;
-    name: string;
-    score: number;
-    level: string;
-    icon: string;
-    trend: string;
-    evidence?: string[];
-    history?: Array<{ date: string; score: number }>;
-  }>;
+  categories: SkillTreeCategory[];
 }
 
 export default function SkillTreePage() {
@@ -106,7 +108,15 @@ export default function SkillTreePage() {
             ← Back to Dashboard
           </Button>
         </div>
-        <SkillTree data={skillTree} />
+        {/* Student context: pass role='student'; grade is handled elsewhere for expectations */}
+        <SkillTreeWithMaturity
+          data={{
+            studentId: skillTree.studentId,
+            lastUpdated: skillTree.lastUpdated,
+            categories: skillTree.categories as any,
+          }}
+          role="student"
+        />
       </div>
     </div>
   );

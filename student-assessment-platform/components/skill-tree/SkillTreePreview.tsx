@@ -20,10 +20,15 @@ interface SkillTreeCategory {
   category: string;
   name: string;
   score: number;
-  level: string;
+  level: string; // Legacy field
   icon: string;
   trend: string;
   evidence?: string[];
+  // New fields for student game-like display
+  skillLevel?: number; // 1-10
+  levelTitle?: string; // "Seedling", "Sprout", etc.
+  skillXP?: number; // XP value
+  currentMaturityBand?: string; // Internal only, not displayed
 }
 
 interface SkillTreePreviewProps {
@@ -112,11 +117,24 @@ export function SkillTreePreview({ categories, onViewFull }: SkillTreePreviewPro
                     {getTrendIcon(category.trend)}
                     <span className="ml-1 capitalize">{category.trend}</span>
                   </Badge>
-                  <span className="text-xs text-gray-600 capitalize">{category.level}</span>
+                  {/* Show game-like level for students (never show maturity band labels) */}
+                  {category.skillLevel && category.levelTitle ? (
+                    <span className="text-xs text-gray-600 font-medium">
+                      Level {category.skillLevel} • {category.levelTitle}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-600 capitalize">{category.level}</span>
+                  )}
                 </div>
                 <div className="mt-2">
                   <Progress value={category.score} className="h-2" />
                 </div>
+                {/* Show XP if available */}
+                {category.skillXP !== undefined && (
+                  <div className="mt-1 text-xs text-gray-500">
+                    {category.skillXP} XP
+                  </div>
+                )}
               </div>
             </div>
             <div className="text-right ml-4">

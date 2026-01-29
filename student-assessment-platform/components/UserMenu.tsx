@@ -27,7 +27,11 @@ import {
   LogOut,
   BarChart3,
   BookOpen,
+  Compass,
+  Target,
 } from 'lucide-react';
+import { useUserRole } from '@/hooks/useUserRole';
+import { getRoleNavItems } from '@/lib/role-utils';
 
 interface UserMenuProps {
   user: {
@@ -40,6 +44,8 @@ interface UserMenuProps {
 
 export function UserMenu({ user, onLogout }: UserMenuProps) {
   const router = useRouter();
+  const { role, loading } = useUserRole();
+  const navItems = role ? getRoleNavItems(role) : null;
 
   const initials = user.name
     .split(' ')
@@ -47,6 +53,37 @@ export function UserMenu({ user, onLogout }: UserMenuProps) {
     .join('')
     .toUpperCase()
     .slice(0, 2);
+
+  if (loading || !navItems) {
+    // Show basic menu while loading
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button className="flex items-center gap-2 rounded-full hover:bg-gray-100 p-1 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+            <Avatar className="h-9 w-9 cursor-pointer">
+              <AvatarImage src={user.avatar} alt={user.name} />
+              <AvatarFallback className="bg-blue-600 text-white text-sm font-semibold">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel>
+            <div className="flex flex-col space-y-1">
+              <p className="text-sm font-medium leading-none">{user.name}</p>
+              <p className="text-xs leading-none text-gray-500">{user.email}</p>
+            </div>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={onLogout} className="text-red-600 focus:text-red-600">
+            <LogOut className="mr-2 h-4 w-4" />
+            <span>Logout</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
 
   return (
     <DropdownMenu>
@@ -69,44 +106,77 @@ export function UserMenu({ user, onLogout }: UserMenuProps) {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         
-        <DropdownMenuItem onClick={() => router.push('/dashboard')}>
-          <BarChart3 className="mr-2 h-4 w-4" />
-          <span>Dashboard</span>
-        </DropdownMenuItem>
+        {/* Student-specific items */}
+        {navItems.showDashboard && (
+          <DropdownMenuItem onClick={() => router.push('/dashboard')}>
+            <BarChart3 className="mr-2 h-4 w-4" />
+            <span>Dashboard</span>
+          </DropdownMenuItem>
+        )}
         
-        <DropdownMenuItem onClick={() => router.push('/assessments')}>
-          <BookOpen className="mr-2 h-4 w-4" />
-          <span>Assessments</span>
-        </DropdownMenuItem>
+        {navItems.showAssessments && (
+          <DropdownMenuItem onClick={() => router.push('/assessments')}>
+            <BookOpen className="mr-2 h-4 w-4" />
+            <span>Assessments</span>
+          </DropdownMenuItem>
+        )}
         
-        <DropdownMenuItem onClick={() => router.push('/profile')}>
-          <User className="mr-2 h-4 w-4" />
-          <span>My Profile</span>
-        </DropdownMenuItem>
+        {navItems.showExplorer && (
+          <DropdownMenuItem onClick={() => router.push('/explorer')}>
+            <Compass className="mr-2 h-4 w-4" />
+            <span>Explorer Mode</span>
+          </DropdownMenuItem>
+        )}
         
-        <DropdownMenuSeparator />
+        {navItems.showFacilitator && (
+          <DropdownMenuItem onClick={() => router.push('/facilitator')}>
+            <Target className="mr-2 h-4 w-4" />
+            <span>Facilitator Mode</span>
+          </DropdownMenuItem>
+        )}
         
-        <DropdownMenuItem onClick={() => router.push('/parent-tracker')}>
-          <UserCheck className="mr-2 h-4 w-4" />
-          <span>Parent Tracker</span>
-        </DropdownMenuItem>
+        {navItems.showProfile && (
+          <DropdownMenuItem onClick={() => router.push('/profile')}>
+            <User className="mr-2 h-4 w-4" />
+            <span>My Profile</span>
+          </DropdownMenuItem>
+        )}
         
-        <DropdownMenuItem onClick={() => router.push('/teacher-tracker')}>
-          <GraduationCap className="mr-2 h-4 w-4" />
-          <span>Teacher Tracker</span>
-        </DropdownMenuItem>
+        {(navItems.showParentTracker || navItems.showTeacherTracker || navItems.showCommunity) && (
+          <DropdownMenuSeparator />
+        )}
         
-        <DropdownMenuItem onClick={() => router.push('/community')}>
-          <Users className="mr-2 h-4 w-4" />
-          <span>Community</span>
-        </DropdownMenuItem>
+        {/* Parent/Teacher items */}
+        {navItems.showParentTracker && (
+          <DropdownMenuItem onClick={() => router.push('/parent-tracker')}>
+            <UserCheck className="mr-2 h-4 w-4" />
+            <span>Parent Tracker</span>
+          </DropdownMenuItem>
+        )}
         
-        <DropdownMenuSeparator />
+        {navItems.showTeacherTracker && (
+          <DropdownMenuItem onClick={() => router.push('/teacher-tracker')}>
+            <GraduationCap className="mr-2 h-4 w-4" />
+            <span>Teacher Tracker</span>
+          </DropdownMenuItem>
+        )}
         
-        <DropdownMenuItem onClick={() => router.push('/settings')}>
-          <Settings className="mr-2 h-4 w-4" />
-          <span>Settings</span>
-        </DropdownMenuItem>
+        {navItems.showCommunity && (
+          <DropdownMenuItem onClick={() => router.push('/community')}>
+            <Users className="mr-2 h-4 w-4" />
+            <span>Community</span>
+          </DropdownMenuItem>
+        )}
+        
+        {navItems.showSettings && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => router.push('/settings')}>
+              <Settings className="mr-2 h-4 w-4" />
+              <span>Settings</span>
+            </DropdownMenuItem>
+          </>
+        )}
         
         <DropdownMenuSeparator />
         

@@ -18,6 +18,11 @@ import { submitAssessmentSchema } from '@/lib/validators';
 import { handleAPIError, successResponse } from '@/lib/api/error-handler';
 import { z } from 'zod';
 import { getGameConfig, getAllGames } from '@/lib/games';
+import { generateDemoQuestions, calculateDemoScore } from '@/lib/demo-questions';
+import { generateDemoReport } from '@/lib/demo-report-generator';
+import { generateGradeContextualSummary } from '@/lib/grade-aware-content';
+import { getCurrentSkillBand } from '@/lib/skill-expectation-helpers';
+import { SkillCategory } from '@prisma/client';
 
 /**
  * POST /api/assessments/attempts/:attemptId/submit
@@ -108,30 +113,62 @@ export async function POST(
         const body = await req.json();
         const validated = submitAssessmentSchema.parse(body);
 
-        // Calculate raw scores (simplified - in production, this would validate answers server-side)
-        const totalQuestions = validated.answers.length;
-        const correctAnswers = validated.answers.filter((a: any) => a !== null && a !== undefined).length;
-        const accuracy = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
-        const timeSpent = validated.telemetry.timeSpent || 0;
-        const avgTimePerQuestion = totalQuestions > 0 ? Math.round(timeSpent / totalQuestions) : 0;
-
-        const rawScores = {
-          correctAnswers,
-          totalQuestions,
-          accuracy,
-          avgTimePerQuestion,
-        };
-
         // Get game config for skill mapping
         const gameConfig = getGameConfig(attempt.gameId);
         const targetCategories = gameConfig?.targetCategories || [];
 
-        // Calculate normalized scores (simplified - in production, use proper normalization)
-        const normalizedScores: Record<string, number> = {};
-        targetCategories.forEach((category) => {
-          // Simple normalization: accuracy percentage as base score
-          normalizedScores[category.toLowerCase()] = accuracy;
-        });
+        // Use demo scoring if DEMO_ASSESSMENTS is enabled
+        const isDemoMode = process.env.DEMO_ASSESSMENTS === 'true';
+        let rawScores: any;
+        let normalizedScores: Record<string, number> = {};
+        let strengths: string[] = [];
+        let growthAreas: string[] = [];
+
+        if (isDemoMode) {
+          // Generate questions with same seed to calculate deterministic scores
+          const seed = `${user.id}-${attempt.id}`;
+          const questions = generateDemoQuestions(attempt.gameId, seed, validated.answers.length);
+          
+          const timeSpent = validated.telemetry.timeSpent || 0;
+          const hintsUsed = validated.telemetry.hintsUsed || 0;
+          
+          const scoreResult = calculateDemoScore(questions, validated.answers, timeSpent, hintsUsed);
+          
+          rawScores = {
+            correctAnswers: Math.round((scoreResult.accuracy / 100) * questions.length),
+            totalQuestions: questions.length,
+            accuracy: scoreResult.accuracy,
+            avgTimePerQuestion: scoreResult.avgTimePerQuestion,
+            timeSpent,
+            hintsUsed,
+          };
+
+          // Map normalized score to target categories
+          targetCategories.forEach((category) => {
+            normalizedScores[category.toLowerCase()] = scoreResult.normalizedScore;
+          });
+
+          strengths = scoreResult.strengths;
+          growthAreas = scoreResult.growthAreas;
+        } else {
+          // Original scoring logic (for future real games)
+          const totalQuestions = validated.answers.length;
+          const correctAnswers = validated.answers.filter((a: any) => a !== null && a !== undefined).length;
+          const accuracy = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+          const timeSpent = validated.telemetry.timeSpent || 0;
+          const avgTimePerQuestion = totalQuestions > 0 ? Math.round(timeSpent / totalQuestions) : 0;
+
+          rawScores = {
+            correctAnswers,
+            totalQuestions,
+            accuracy,
+            avgTimePerQuestion,
+          };
+
+          targetCategories.forEach((category) => {
+            normalizedScores[category.toLowerCase()] = accuracy;
+          });
+        }
 
         // Update attempt with completion
         const completedAttempt = await db.assessmentAttempt.update({
@@ -232,7 +269,25 @@ export async function POST(
             },
           });
 
-          // TODO: Enqueue AI report generation job
+          // Generate demo AI report if in demo mode
+          if (isDemoMode) {
+            try {
+              const allCompletedAttempts = await db.assessmentAttempt.findMany({
+                where: {
+                  studentId: student.id,
+                  tenantId,
+                  status: 'COMPLETED',
+                },
+                select: {
+                  gameId: true,
+                },
+              });
+              await generateDemoReport(student.id, tenantId, allCompletedAttempts.map(a => a.gameId));
+            } catch (err) {
+              console.error('Error generating demo report:', err);
+              // Don't fail the submission if report generation fails
+            }
+          }
         }
 
         // Find next game
@@ -241,16 +296,58 @@ export async function POST(
           ? allGames[currentGameIndex + 1]
           : null;
 
+        // Get grade-contextual summary if all games completed
+        const studentGrade = student.currentGrade || 8;
+        let gradeContextualSummary = null;
+        
+        if (allGamesCompleted) {
+          try {
+            // Get current skill bands from skill scores
+            const allSkillScores = await db.skillScore.findMany({
+              where: {
+                studentId: student.id,
+                tenantId,
+              },
+            });
+            
+            const skillBands: Record<SkillCategory, any> = {} as any;
+            for (const skillScore of allSkillScores) {
+              // Get current skill band (placeholder - will be replaced with actual calculation)
+              const band = await getCurrentSkillBand(student.id, skillScore.category);
+              skillBands[skillScore.category] = band;
+            }
+            
+            // Generate grade-contextual summary
+            gradeContextualSummary = generateGradeContextualSummary(skillBands, studentGrade as 8 | 9 | 10);
+          } catch (err) {
+            console.error('Error generating grade-contextual summary:', err);
+            // Don't fail the submission if summary generation fails
+          }
+        }
+
         return successResponse({
           attemptId: completedAttempt.id,
           status: completedAttempt.status,
           completedAt: completedAttempt.completedAt,
           rawScores,
-          message: 'Great work! Your results are being processed.',
+          ...(isDemoMode && {
+            strengths,
+            growthAreas,
+          }),
+          message: allGamesCompleted 
+            ? 'Congratulations! You\'ve completed all assessments. Your comprehensive report is ready!'
+            : 'Great work! Your results are being processed.',
           ...(nextGame && {
             nextGame: {
               id: nextGame.id,
               name: nextGame.name,
+            },
+          }),
+          allGamesCompleted,
+          ...(gradeContextualSummary && {
+            gradeContextualSummary: {
+              overallInsight: gradeContextualSummary.overallInsight,
+              // Don't expose full interpretations to student UI (for parent/teacher only)
             },
           }),
         });

@@ -74,7 +74,8 @@ export const GET = requireAuth(
         id: student.id,
         userId: student.userId,
         tenantId: student.tenantId,
-        grade: student.grade,
+        grade: student.grade, // Legacy
+        currentGrade: student.currentGrade,
         section: student.section,
         dateOfBirth: student.dateOfBirth,
         goals: student.goals,
