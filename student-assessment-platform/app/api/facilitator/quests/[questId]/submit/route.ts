@@ -163,8 +163,18 @@ export async function POST(
           const timeSpent = telemetrySummary?.timeSpent || 0;
 
           if (quest.type === 'mini_game' && answers && Array.isArray(answers)) {
+            // For facilitator quests, ensure we have a gameId
+            const gameId = quest.content?.gameId || 'pattern_forge';
+            const questWithGameId = {
+              ...quest,
+              content: {
+                ...quest.content,
+                gameId,
+                questionCount: quest.content?.questionCount || 6,
+              },
+            };
             const seed = `${user.id}-${attempt.id}`;
-            const questions = generateQuestQuestions(quest, seed);
+            const questions = generateQuestQuestions(questWithGameId, seed);
             const hintsUsed = telemetrySummary?.hintsUsed || 0;
             const scoreResult = calculateDemoScore(questions, answers, timeSpent, hintsUsed);
 
@@ -172,16 +182,19 @@ export async function POST(
               accuracy: scoreResult.accuracy,
               avgTimePerQuestion: scoreResult.avgTimePerQuestion,
               normalizedScore: scoreResult.normalizedScore,
+              skillSignals: quest.skillFocus || [],
             };
           } else if (quest.type === 'reflection' && response) {
             scoreSummary = {
               responseLength: response.length,
               responseQuality: response.length > 100 ? 100 : response.length,
+              skillSignals: quest.skillFocus || [],
             };
           } else if (quest.type === 'choice_scenario' && choice !== undefined) {
             scoreSummary = {
               choiceIndex: choice,
               choiceMade: true,
+              skillSignals: quest.skillFocus || [],
             };
           }
 
@@ -214,8 +227,76 @@ export async function POST(
             },
           });
 
-          // Update skill scores and goal readiness
-          // (Simplified - in full implementation, update SkillScore records)
+          // Update skill scores based on quest performance
+          const skillFocus = quest.skillFocus || [];
+          const accuracy = scoreSummary.accuracy || (scoreSummary.responseQuality ? scoreSummary.responseQuality / 100 : 0.5);
+          const normalizedAccuracy = typeof accuracy === 'number' && accuracy <= 1 ? accuracy : accuracy / 100;
+          
+          // Calculate skill score improvement (0-100 scale)
+          const skillScoreDelta = Math.round(normalizedAccuracy * 20); // Up to 20 points per quest
+          
+          // Update skill scores for each skill in skillFocus
+          for (const skillStr of skillFocus) {
+            try {
+              const skillCategory = skillStr.toUpperCase() as any;
+              
+              // Get existing skill score
+              const existingScore = await db.skillScore.findUnique({
+                where: {
+                  studentId_category: {
+                    studentId: student.id,
+                    category: skillCategory,
+                  },
+                },
+              });
+
+              const newScore = Math.min(100, (existingScore?.score || 50) + skillScoreDelta);
+              const newEvidence = `Facilitator Quest: ${quest.title || questId}`;
+              const newHistoryEntry = { date: new Date().toISOString(), score: newScore };
+
+              if (existingScore) {
+                // Update existing score
+                const existingEvidence = (existingScore.evidence || []) as string[];
+                const existingHistory = (existingScore.history || []) as Array<{ date: string; score: number }>;
+
+                await db.skillScore.update({
+                  where: {
+                    studentId_category: {
+                      studentId: student.id,
+                      category: skillCategory,
+                    },
+                  },
+                  data: {
+                    score: newScore,
+                    level: newScore >= 80 ? 'ADVANCED' : newScore >= 60 ? 'PROFICIENT' : newScore >= 40 ? 'DEVELOPING' : 'EMERGING',
+                    lastUpdatedAt: new Date(),
+                    evidence: [...existingEvidence, newEvidence],
+                    history: [...existingHistory, newHistoryEntry] as any,
+                    trend: newScore > existingScore.score ? 'IMPROVING' : newScore < existingScore.score ? 'NEEDS_ATTENTION' : 'STABLE',
+                  },
+                });
+              } else {
+                // Create new skill score
+                await db.skillScore.create({
+                  data: {
+                    studentId: student.id,
+                    tenantId,
+                    category: skillCategory,
+                    score: newScore,
+                    level: newScore >= 80 ? 'ADVANCED' : newScore >= 60 ? 'PROFICIENT' : newScore >= 40 ? 'DEVELOPING' : 'EMERGING',
+                    trend: 'IMPROVING',
+                    evidence: [newEvidence],
+                    history: [newHistoryEntry] as any,
+                  },
+                });
+              }
+            } catch (err: any) {
+              // Log error but don't fail the submission
+              console.error(`Error updating skill score for ${skillStr}:`, err);
+            }
+          }
+
+          // Get updated skill scores for goal readiness calculation
           const skillScores = await db.skillScore.findMany({
             where: {
               studentId: student.id,
@@ -245,9 +326,13 @@ export async function POST(
               success: true,
               data: {
                 attemptId: completedAttempt.id,
-                scoreSummary,
+                scoreSummary: {
+                  ...scoreSummary,
+                  timeSpent,
+                },
                 coachingInsight,
                 goalReadiness: newGoalReadiness,
+                timeSpent,
               },
             },
             { status: 200 }

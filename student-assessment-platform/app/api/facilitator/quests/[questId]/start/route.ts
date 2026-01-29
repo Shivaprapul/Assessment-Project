@@ -119,8 +119,19 @@ export async function POST(
             const seed = `${user.id}-${inProgressAttempt.id}`;
             let questions: any[] = [];
 
-            if (quest.type === 'mini_game' && quest.content?.gameId) {
-              questions = generateQuestQuestions(quest, seed);
+            // Handle facilitator quests: they may not have content.gameId, use skillFocus to determine game
+            if (quest.type === 'mini_game') {
+              // For facilitator quests, use a default gameId based on skillFocus or use pattern_forge
+              const gameId = quest.content?.gameId || 'pattern_forge';
+              const questWithGameId = {
+                ...quest,
+                content: {
+                  ...quest.content,
+                  gameId,
+                  questionCount: quest.content?.questionCount || 6,
+                },
+              };
+              questions = generateQuestQuestions(questWithGameId, seed);
             }
 
             return NextResponse.json(
@@ -136,7 +147,11 @@ export async function POST(
                     type: q.type,
                     options: q.options,
                   })),
-                  content: quest.content,
+                  content: quest.content || {
+                    prompt: quest.description, // For reflection
+                    scenario: quest.description, // For scenario
+                    choices: [], // Will be populated if needed
+                  },
                 },
               },
               { status: 200 }
@@ -165,8 +180,39 @@ export async function POST(
           const seed = `${user.id}-${attempt.id}`;
           let questions: any[] = [];
 
-          if (quest.type === 'mini_game' && quest.content?.gameId) {
-            questions = generateQuestQuestions(quest, seed);
+          // Handle facilitator quests: they may not have content.gameId, use skillFocus to determine game
+          if (quest.type === 'mini_game') {
+            // For facilitator quests, use a default gameId based on skillFocus or use pattern_forge
+            const gameId = quest.content?.gameId || 'pattern_forge';
+            const questWithGameId = {
+              ...quest,
+              content: {
+                ...quest.content,
+                gameId,
+                questionCount: quest.content?.questionCount || 6,
+              },
+            };
+            questions = generateQuestQuestions(questWithGameId, seed);
+          }
+
+          // Prepare content for reflection and scenario quests
+          let questContent: any = quest.content;
+          if (!questContent) {
+            if (quest.type === 'reflection') {
+              questContent = {
+                prompt: quest.description || 'Reflect on your learning',
+              };
+            } else if (quest.type === 'choice_scenario') {
+              questContent = {
+                scenario: quest.description || 'Consider this scenario',
+                choices: quest.content?.choices || [
+                  'Option 1',
+                  'Option 2',
+                  'Option 3',
+                  'Option 4',
+                ],
+              };
+            }
           }
 
           return NextResponse.json(
@@ -182,7 +228,7 @@ export async function POST(
                   type: q.type,
                   options: q.options,
                 })),
-                content: quest.content,
+                content: questContent,
               },
             },
             { status: 200 }

@@ -95,8 +95,14 @@ export default function QuestRunnerPage({ params }: { params: Promise<{ questId:
       }
 
       const data = await response.json();
-      if (data?.success) {
-        setQuestData(data.data);
+      if (data?.success && data.data) {
+        // Ensure questData has all required fields
+        const questData = {
+          ...data.data,
+          questions: data.data.questions || [],
+          content: data.data.content || {},
+        };
+        setQuestData(questData);
       } else {
         throw new Error('Invalid response from server');
       }
@@ -127,8 +133,14 @@ export default function QuestRunnerPage({ params }: { params: Promise<{ questId:
       }
 
       const data = await response.json();
-      if (data?.success) {
-        setQuestData(data.data);
+      if (data?.success && data.data) {
+        // Ensure questData has all required fields
+        const questData = {
+          ...data.data,
+          questions: data.data.questions || [],
+          content: data.data.content || {},
+        };
+        setQuestData(questData);
       } else {
         throw new Error('Invalid response from server');
       }
@@ -320,75 +332,84 @@ export default function QuestRunnerPage({ params }: { params: Promise<{ questId:
           )}
 
           {/* Mini Game Quest */}
-          {questData.questType === 'mini_game' && questData.questions && (
+          {questData.questType === 'mini_game' && (
             <Card className="mb-6">
               <CardContent className="p-8">
-                <div className="text-center mb-8">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                    {questData.questions[currentQuestion]?.question}
-                  </h2>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {questData.questions[currentQuestion]?.options?.map((option, idx) => (
-                    <Button
-                      key={idx}
-                      variant="outline"
-                      className={cn(
-                        "h-20 text-lg font-semibold bg-white hover:bg-blue-50",
-                        answers[currentQuestion] === idx && "bg-blue-500 text-white hover:bg-blue-600"
-                      )}
-                      onClick={() => handleAnswer(currentQuestion, idx)}
-                    >
-                      {option}
-                    </Button>
-                  ))}
-                </div>
-                <div className="flex items-center justify-between mt-8">
-                  <Button
-                    variant="outline"
-                    onClick={() => setCurrentQuestion(Math.max(0, currentQuestion - 1))}
-                    disabled={currentQuestion === 0}
-                  >
-                    Previous
-                  </Button>
-                  {currentQuestion < totalQuestions - 1 ? (
-                    <Button
-                      onClick={() => setCurrentQuestion(Math.min(totalQuestions - 1, currentQuestion + 1))}
-                      disabled={answers[currentQuestion] === undefined}
-                    >
-                      Next
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={handleSubmit}
-                      disabled={!canSubmit() || isSubmitting}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Submitting...
-                        </>
+                {questData.questions && questData.questions.length > 0 ? (
+                  <>
+                    <div className="text-center mb-8">
+                      <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                        {questData.questions[currentQuestion]?.question || 'Question'}
+                      </h2>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {questData.questions[currentQuestion]?.options?.map((option, idx) => (
+                        <Button
+                          key={idx}
+                          variant="outline"
+                          className={cn(
+                            "h-20 text-lg font-semibold bg-white hover:bg-blue-50",
+                            answers[currentQuestion] === idx && "bg-blue-500 text-white hover:bg-blue-600"
+                          )}
+                          onClick={() => handleAnswer(currentQuestion, idx)}
+                        >
+                          {option}
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between mt-8">
+                      <Button
+                        variant="outline"
+                        onClick={() => setCurrentQuestion(Math.max(0, currentQuestion - 1))}
+                        disabled={currentQuestion === 0}
+                      >
+                        Previous
+                      </Button>
+                      {currentQuestion < totalQuestions - 1 ? (
+                        <Button
+                          onClick={() => setCurrentQuestion(Math.min(totalQuestions - 1, currentQuestion + 1))}
+                          disabled={answers[currentQuestion] === null || answers[currentQuestion] === undefined}
+                        >
+                          Next
+                        </Button>
                       ) : (
-                        <>
-                          <CheckCircle2 className="h-4 w-4 mr-2" />
-                          Submit
-                        </>
+                        <Button
+                          onClick={handleSubmit}
+                          disabled={!canSubmit() || isSubmitting}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Submitting...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="h-4 w-4 mr-2" />
+                              Submit
+                            </>
+                          )}
+                        </Button>
                       )}
-                    </Button>
-                  )}
-                </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500 mb-4">Loading questions...</p>
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto" />
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
 
           {/* Reflection Quest */}
-          {questData.questType === 'reflection' && questData.content && (
+          {questData.questType === 'reflection' && (
             <Card className="mb-6">
               <CardContent className="p-8">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                    {questData.content.prompt || 'Reflection Prompt'}
+                    {questData.content?.prompt || 'Reflect on your learning today'}
                   </h2>
                   <p className="text-gray-600">
                     Take your time to think and write your response.
@@ -425,19 +446,20 @@ export default function QuestRunnerPage({ params }: { params: Promise<{ questId:
           )}
 
           {/* Choice Scenario Quest */}
-          {questData.questType === 'choice_scenario' && questData.content && (
+          {questData.questType === 'choice_scenario' && (
             <Card className="mb-6">
               <CardContent className="p-8">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                    {questData.content.scenario || 'Scenario'}
+                    {questData.content?.scenario || 'Consider this scenario'}
                   </h2>
                   <p className="text-gray-600">
                     Consider the situation and choose the option that best reflects your approach.
                   </p>
                 </div>
                 <div className="space-y-4">
-                  {questData.content.choices?.map((choice: string, idx: number) => (
+                  {questData.content?.choices && questData.content.choices.length > 0 ? (
+                    questData.content.choices.map((choice: string, idx: number) => (
                     <Button
                       key={idx}
                       variant="outline"
@@ -449,7 +471,10 @@ export default function QuestRunnerPage({ params }: { params: Promise<{ questId:
                     >
                       {choice}
                     </Button>
-                  ))}
+                    ))
+                  ) : (
+                    <p className="text-gray-500 text-center py-4">No choices available for this scenario</p>
+                  )}
                 </div>
                 <div className="mt-6 flex justify-end">
                   <Button

@@ -108,6 +108,14 @@ export default function LoginPage() {
           <p className="text-sm text-gray-600 text-center">
             New here? Contact your school administrator
           </p>
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+            <p className="text-xs text-blue-800 text-center">
+              <strong>Test Accounts:</strong><br />
+              Teacher: teacher@test-school.com<br />
+              Student: student@test-school.com<br />
+              Parent: parent@test-school.com
+            </p>
+          </div>
         </CardFooter>
       </Card>
     </div>

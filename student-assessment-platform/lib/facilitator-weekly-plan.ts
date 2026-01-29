@@ -167,6 +167,7 @@ function generateDailyFacilitatorQuests(
     secondarySkills?: string[];
     difficultyByGrade?: Record<number, 'easy' | 'medium' | 'hard'>;
     constraints?: string[]; // Grade-specific constraints (stored in metadata, not returned in DailyPlanItem)
+    content?: any; // Quest content (gameId, prompt, scenario, choices)
   }> = [];
   
   questTypes.forEach((type, idx) => {
@@ -192,18 +193,69 @@ function generateDailyFacilitatorQuests(
       constraints = ['frequent_timer', 'mixed_skills', 'endurance_sets'];
     }
 
+    // Prepare content based on quest type
+    let questContent: any = {};
+    
     switch (type) {
       case 'mini_game':
         title = `Skill Builder: ${skillFocus[0].replace(/_/g, ' ')}`;
         description = `Practice ${skillFocus[0].replace(/_/g, ' ')} through a quick challenge`;
+        questContent = {
+          gameId: 'pattern_forge', // Default game for facilitator mini_game quests
+          questionCount: studentGrade === 8 ? 6 : studentGrade === 9 ? 7 : 8,
+        };
         break;
       case 'reflection':
         title = `Reflect: ${skillFocus[0].replace(/_/g, ' ')}`;
         description = `Think about how you've been developing ${skillFocus[0].replace(/_/g, ' ')}`;
+        // Grade-specific reflection prompts
+        const reflectionPrompts = {
+          8: `What did you learn today about ${skillFocus[0].replace(/_/g, ' ')}? How might you use this in the future?`,
+          9: `Reflect on a challenge you faced today related to ${skillFocus[0].replace(/_/g, ' ')}. What strategies did you use?`,
+          10: `Think about your learning process today with ${skillFocus[0].replace(/_/g, ' ')}. How did you approach it, and what patterns did you notice?`,
+        };
+        questContent = {
+          prompt: reflectionPrompts[studentGrade as keyof typeof reflectionPrompts] || reflectionPrompts[8],
+        };
         break;
       case 'choice_scenario':
         title = `Scenario: ${skillFocus[0].replace(/_/g, ' ')}`;
         description = `Explore a situation that tests your ${skillFocus[0].replace(/_/g, ' ')}`;
+        // Grade-specific scenarios
+        const scenarios = {
+          8: {
+            scenario: `You're working on a group project and notice a teammate struggling with ${skillFocus[0].replace(/_/g, ' ')}. What do you do?`,
+            choices: [
+              'Offer to help them understand the concept',
+              'Focus on your own work and let them figure it out',
+              'Suggest they ask the teacher for help',
+              'Work together to find a solution that helps everyone',
+            ],
+          },
+          9: {
+            scenario: `You notice a classmate being excluded from a group activity related to ${skillFocus[0].replace(/_/g, ' ')}. How do you respond?`,
+            choices: [
+              'Invite them to join your group',
+              'Talk to a teacher about the situation',
+              'Observe and see if the situation resolves itself',
+              'Address the group directly about inclusion',
+            ],
+          },
+          10: {
+            scenario: `You discover that a friend has been copying your work related to ${skillFocus[0].replace(/_/g, ' ')}. How do you handle this?`,
+            choices: [
+              'Confront them directly about academic integrity',
+              'Offer to help them understand the material instead',
+              'Report it to the teacher',
+              'Have a private conversation about the importance of learning',
+            ],
+          },
+        };
+        const scenario = scenarios[studentGrade as keyof typeof scenarios] || scenarios[8];
+        questContent = {
+          scenario: scenario.scenario,
+          choices: scenario.choices,
+        };
         break;
     }
 
@@ -218,6 +270,7 @@ function generateDailyFacilitatorQuests(
       primarySkills: skillFocus as SkillCategory[], // Cast to SkillCategory[] for type compatibility
       secondarySkills: [],
       constraints, // Grade-specific constraints stored in quest metadata
+      content: questContent, // Add content structure for each quest type
     });
   });
 

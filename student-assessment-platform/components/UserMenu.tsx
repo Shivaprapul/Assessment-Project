@@ -171,7 +171,15 @@ export function UserMenu({ user, onLogout }: UserMenuProps) {
         {navItems.showSettings && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push('/settings')}>
+            <DropdownMenuItem onClick={() => {
+              // Role-based settings routing
+              const userRole = role || 'STUDENT';
+              if (userRole === 'TEACHER' || userRole === 'SCHOOL_ADMIN') {
+                router.push('/teacher/settings');
+              } else {
+                router.push('/settings');
+              }
+            }}>
               <Settings className="mr-2 h-4 w-4" />
               <span>Settings</span>
             </DropdownMenuItem>

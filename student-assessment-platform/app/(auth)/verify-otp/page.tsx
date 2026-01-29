@@ -151,9 +151,22 @@ function VerifyOTPForm() {
       // Small delay to ensure localStorage is written and router is ready
       await new Promise(resolve => setTimeout(resolve, 200));
 
-      // Redirect to dashboard (use replace to avoid back button issues)
-      console.log('🔄 Redirecting to dashboard...');
-      router.replace('/dashboard');
+      // Redirect based on user role
+      const userRole = data.data?.user?.role;
+      let redirectPath = '/dashboard'; // Default for students
+      
+      if (userRole === 'TEACHER' || userRole === 'SCHOOL_ADMIN') {
+        redirectPath = '/teacher'; // Redirect to teacher dashboard
+        console.log(`🔄 Teacher detected! Redirecting to ${redirectPath}...`);
+        console.log(`🔄 User data:`, JSON.stringify(data.data?.user, null, 2));
+      } else if (userRole === 'PARENT') {
+        redirectPath = '/parent-tracker';
+      } else if (userRole === 'PLATFORM_ADMIN') {
+        redirectPath = '/admin'; // Platform admin dashboard (if exists)
+      }
+      
+      console.log(`🔄 Redirecting ${userRole} to ${redirectPath}...`);
+      router.replace(redirectPath);
     } catch (err) {
       console.error('Error during OTP verification:', err);
       setError('Network error. Please try again.');

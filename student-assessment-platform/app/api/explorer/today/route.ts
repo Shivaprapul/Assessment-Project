@@ -165,9 +165,14 @@ export async function GET(req: NextRequest) {
               secondarySkills: (quest.secondarySkills || []) as any as import('@prisma/client').SkillCategory[],
             }));
             
+            // Get Class Focus boosts (if teacher has set them for this grade)
+            // Note: For student-driven quests, we don't apply class focus (only for teacher assignments)
+            // This is kept here for future use if needed
+            const classFocusBoosts: Record<string, number> = {};
+            
             // Prioritize quests: high grade emphasis + low student score + recent weak signals = higher priority
             const prioritizedQuests = questsWithGrade.map(quest => {
-              let priority = 0;
+              let basePriority = 0;
               
               // Primary priority: grade emphasis + student skill scores
               if (quest.primarySkills && quest.primarySkills.length > 0) {
@@ -175,16 +180,29 @@ export async function GET(req: NextRequest) {
                   const emphasisWeight = getEmphasisWeightForGradeSkill(studentGrade as any, skill as any);
                   const studentScore = skillScoreMap[skill] || 50; // Default to 50 if unknown
                   // Higher emphasis + lower score = higher priority
-                  priority += emphasisWeight * (100 - studentScore);
+                  basePriority += emphasisWeight * (100 - studentScore);
                   
                   // Secondary priority: recent weak signals (rolling 7/14 days)
                   const weakSignal = weakSignalMap[skill] || 0;
                   // Add weak signal boost (scaled to not overwhelm primary priority)
-                  priority += weakSignal * 0.3; // 30% weight for weak signals
+                  basePriority += weakSignal * 0.3; // 30% weight for weak signals
                 }
               }
               
-              return { quest, priority };
+              // Apply Class Focus boost if available (for teacher assignments, not student-driven)
+              // For now, this is a placeholder - actual integration happens in assignment quest selection
+              let finalPriority = basePriority;
+              if (Object.keys(classFocusBoosts).length > 0 && quest.primarySkills) {
+                // Apply boost for primary skills
+                for (const skill of quest.primarySkills) {
+                  const boost = classFocusBoosts[skill] || 0;
+                  const cappedBoost = Math.min(0.20, Math.max(0, boost));
+                  finalPriority = basePriority * (1 + cappedBoost);
+                  break; // Apply boost once per quest (use first primary skill)
+                }
+              }
+              
+              return { quest, priority: finalPriority, basePriority };
             }).sort((a, b) => b.priority - a.priority).map(item => item.quest);
             
             // Select top 3 quests using grade-aware selection

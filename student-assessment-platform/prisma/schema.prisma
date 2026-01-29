@@ -31,6 +31,7 @@ model Tenant {
   students           StudentProfile[]
   activities         Activity[]
   academicYearConfig AcademicYearConfig?
+  classSections      ClassSection[]
 
   @@index([subdomain])
   @@map("tenants")
@@ -60,6 +61,7 @@ model User {
   studentProfile StudentProfile?
   consentRecords ConsentRecord[]
   auditLogs      AuditLog[]
+  classSections  ClassSection[] // Teachers can be assigned to multiple sections
 
   @@unique([tenantId, email])
   @@index([tenantId, role])
@@ -109,10 +111,14 @@ model StudentProfile {
   weeklyPlans        WeeklyPlan[]
   gradeJourneys      GradeJourney[]
   gradeMasteryBadges GradeMasteryBadge[]
+  assignmentAttempts AssignmentAttempt[]
+  classSectionId     String?
+  classSection       ClassSection?       @relation(fields: [classSectionId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@index([grade])
   @@index([currentGrade])
+  @@index([classSectionId])
   @@map("student_profiles")
 }
 
@@ -660,4 +666,179 @@ model VerificationToken {
 
   @@unique([identifier, token])
   @@map("verification_tokens")
+}
+
+// ============= TEACHER PORTAL MODELS =============
+
+model ClassFocusProfile {
+  id             String   @id @default(uuid())
+  tenantId       String
+  teacherId      String // User ID of the teacher
+  grade          Int? // Grade (8, 9, 10) or null for class-wide
+  classId        String? // Optional class identifier
+  focusWindow    Json     @default("{}") // { startDate, endDate, type: "week" | "month" | "custom" }
+  priorityBoosts Json     @default("{}") // Map of skill categories to boost values (0-0.2)
+  notes          String?  @db.Text
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([tenantId, teacherId])
+  @@index([tenantId, grade])
+  @@map("class_focus_profiles")
+}
+
+model StudentGroup {
+  id          String    @id @default(uuid())
+  tenantId    String
+  teacherId   String // User ID of the teacher who created it
+  name        String
+  type        GroupType @default(MANUAL)
+  description String?   @db.Text
+  studentIds  String[] // Array of student profile IDs
+  criteria    Json?     @default("{}") // Auto-generation criteria for SMART groups
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  assignments Assignment[]
+
+  @@index([tenantId, teacherId])
+  @@map("student_groups")
+}
+
+enum GroupType {
+  MANUAL // Teacher-created group
+  SMART // Auto-generated group
+
+  @@map("group_type")
+}
+
+model Assignment {
+  id          String            @id @default(uuid())
+  tenantId    String
+  teacherId   String // User ID of the teacher
+  title       String
+  description String?           @db.Text
+  targetType  AssignmentTarget  @default(CLASS)
+  targetIds   String[] // Class ID, group IDs, or student IDs
+  questCount  Int               @default(4)
+  questTypes  String[] // ["mini_game", "reflection", "choice_scenario"]
+  gradeScope  Int? // Grade (8, 9, 10) or null for student's current grade
+  intent      AssignmentIntent?
+  dueDate     DateTime?
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  group    StudentGroup?       @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  groupId  String?
+  attempts AssignmentAttempt[]
+
+  @@index([tenantId, teacherId])
+  @@index([tenantId, targetType])
+  @@map("assignments")
+}
+
+enum AssignmentTarget {
+  CLASS // Entire class
+  GROUP // Specific group
+  INDIVIDUAL // Individual student(s)
+
+  @@map("assignment_target")
+}
+
+enum AssignmentIntent {
+  IMPROVE_FOCUS
+  STRENGTHEN_PLANNING
+  ENCOURAGE_COMMUNICATION
+  BUILD_CONSISTENCY
+  PREPARE_FOR_EXAMS
+  REENGAGE_PARTICIPATION
+
+  @@map("assignment_intent")
+}
+
+model AssignmentAttempt {
+  id             String           @id @default(uuid())
+  assignmentId   String
+  assignment     Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId      String
+  student        StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tenantId       String
+  questId        String // The quest that was assigned
+  questAttemptId String? // Link to QuestAttempt if completed
+  status         AssignmentStatus @default(PENDING)
+  assignedAt     DateTime         @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+
+  @@index([tenantId, assignmentId])
+  @@index([studentId, assignmentId])
+  @@map("assignment_attempts")
+}
+
+enum AssignmentStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+
+  @@map("assignment_status")
+}
+
+// ============= CLASS SECTION MODEL =============
+
+model ClassSection {
+  id                String   @id @default(uuid())
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name              String // e.g., "8A", "9B", "10C"
+  grade             Int // 8, 9, or 10
+  teacherId         String // Primary teacher assigned to this section
+  teacher           User     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  academicYearStart DateTime @db.Date
+  academicYearEnd   DateTime @db.Date
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  students StudentProfile[]
+
+  @@index([tenantId, grade])
+  @@index([tenantId, teacherId])
+  @@index([tenantId, academicYearStart, academicYearEnd])
+  @@map("class_sections")
+}
+
+// ============= TEACHER MODELS =============
+
+model TeacherProfile {
+  id            String   @id @default(uuid())
+  teacherId     String   @unique // FK to User
+  tenantId      String
+  displayName   String?
+  avatarUrl     String?
+  phone         String?
+  subjectsTaught String[] @default([])
+  roleLabel     String? // e.g., "Class Teacher", "Subject Teacher"
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([tenantId, teacherId])
+  @@map("teacher_profiles")
+}
+
+model TeacherSettings {
+  id                String   @id @default(uuid())
+  teacherId         String   @unique // FK to User
+  tenantId          String
+  assignmentDefaults Json    @default("{}") // { defaultDueDays, defaultQuestCount, defaultQuestTypes, defaultIntent }
+  notificationPrefs Json    @default("{}") // { emailEnabled, inAppEnabled, alertInactiveDays, alertOverdueAssignments, alertEngagementDrop, alertGroupGrowthThreshold }
+  reportPrefs       Json    @default("{}") // { defaultTimeRange, weeklySummaryEmail, defaultLanding }
+  privacyPrefs      Json    @default("{}") // { hideCharacterValuesInsights, showOnlyBriefSummaries, disableSensitiveNarratives }
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([tenantId, teacherId])
+  @@map("teacher_settings")
 }
