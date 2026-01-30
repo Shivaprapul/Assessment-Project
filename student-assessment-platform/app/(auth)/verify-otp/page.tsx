@@ -160,7 +160,7 @@ function VerifyOTPForm() {
         console.log(`🔄 Teacher detected! Redirecting to ${redirectPath}...`);
         console.log(`🔄 User data:`, JSON.stringify(data.data?.user, null, 2));
       } else if (userRole === 'PARENT') {
-        redirectPath = '/parent-tracker';
+        redirectPath = '/parent';
       } else if (userRole === 'PLATFORM_ADMIN') {
         redirectPath = '/admin'; // Platform admin dashboard (if exists)
       }
